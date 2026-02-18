@@ -443,68 +443,106 @@ class JobScraper:
         return jobs
 
     # ═══════════════════════════════════════════════════════════════════════════
-    #  5. LINKEDIN — Public search, no login needed
+    #  5. LINKEDIN — Public search (updated selectors + anti-block headers)
     # ═══════════════════════════════════════════════════════════════════════════
     def scrape_linkedin(self) -> List[Dict]:
         """
         LinkedIn public job listings — works without login.
-        Uses the public /jobs/search endpoint with a delay between requests.
+        Updated selectors and headers to reduce blocking.
+        Multiple CSS strategies since LinkedIn changes HTML frequently.
         """
         jobs = []
         searches = [
-            ("call center agent", "Philippines"),
-            ("virtual assistant", "Philippines"),
-            ("BPO customer service", "Philippines"),
-            ("work from home Philippines", ""),
-            ("POGO online gaming Philippines", ""),
-            ("accounting remote Philippines", ""),
+            ("call center agent Philippines", "Philippines"),
+            ("virtual assistant Philippines", "Philippines"),
+            ("BPO customer service Philippines", "Philippines"),
+            ("work from home Philippines", "Philippines"),
+            ("POGO online gaming Philippines", "Philippines"),
         ]
 
         for keywords, location in searches:
             try:
-                kw_enc  = keywords.replace(" ", "%20")
-                loc_enc = location.replace(" ", "%20")
+                kw_enc  = requests.utils.quote(keywords)
+                loc_enc = requests.utils.quote(location)
                 url     = (
                     f"https://www.linkedin.com/jobs/search?"
                     f"keywords={kw_enc}&location={loc_enc}"
                     f"&f_TPR=r86400&sortBy=DD&position=1&pageNum=0"
                 )
-                resp = requests.get(url, headers=get_headers({
-                    "Referer": "https://www.linkedin.com/",
-                }), timeout=TIMEOUT)
+                headers = get_headers({
+                    "Referer":            "https://www.linkedin.com/jobs/",
+                    "sec-ch-ua":          '"Not_A Brand";v="8", "Chromium";v="121"',
+                    "sec-ch-ua-mobile":   "?0",
+                    "sec-ch-ua-platform": '"Windows"',
+                    "Sec-Fetch-Dest":     "document",
+                    "Sec-Fetch-Mode":     "navigate",
+                    "Sec-Fetch-Site":     "same-origin",
+                })
+                resp = requests.get(url, headers=headers, timeout=TIMEOUT)
 
-                soup  = BeautifulSoup(resp.text, "html.parser")
+                # LinkedIn returns 429/999 when blocking scrapers
+                if resp.status_code in (429, 403, 999):
+                    logger.debug(f"LinkedIn blocked ({resp.status_code}): {keywords}")
+                    continue
+
+                soup = BeautifulSoup(resp.text, "html.parser")
+
+                # Strategy 1: JSON-LD (most reliable when available)
+                for script in soup.find_all("script", type="application/ld+json"):
+                    try:
+                        data  = json.loads(script.string or "")
+                        items = data if isinstance(data, list) else [data]
+                        for item in items:
+                            if item.get("@type") == "JobPosting":
+                                title   = item.get("title", "")
+                                company = item.get("hiringOrganization", {}).get("name", "")
+                                link    = item.get("url", "")
+                                loc_raw = item.get("jobLocation", {})
+                                loc_str = "Philippines"
+                                if isinstance(loc_raw, dict):
+                                    loc_str = loc_raw.get("address", {}).get("addressLocality", "Philippines")
+                                if title and link:
+                                    jobs.append(make_job(title, company, link, "LinkedIn", loc_str))
+                    except Exception:
+                        pass
+
+                # Strategy 2: CSS selectors (multiple attempts for LI versions)
                 cards = (
-                    soup.find_all("div", class_=re.compile(r"base-card|job-search-card", re.I))
-                    or soup.find_all("li", class_=re.compile(r"result-card", re.I))
+                    soup.find_all("div", class_=re.compile(r"base-card|job-search-card|base-search-card", re.I))
+                    or soup.find_all("li", class_=re.compile(r"result-card|jobs-search-results__list-item", re.I))
+                    or soup.find_all("div", attrs={"data-entity-urn": re.compile(r"jobPosting", re.I)})
                 )
 
                 for card in cards[:10]:
                     title_el = (
-                        card.find("h3", class_=re.compile(r"title", re.I))
+                        card.find("h3", class_=re.compile(r"title|base-search-card__title", re.I))
                         or card.find("h3")
                         or card.find("h2")
                     )
                     if not title_el:
                         continue
 
-                    title  = title_el.get_text(strip=True)
-                    a_el   = card.find("a", href=True)
-                    link   = a_el["href"].split("?")[0] if a_el else ""  # strip tracking params
+                    title = title_el.get_text(strip=True)
+                    a_el  = card.find("a", href=True)
+                    link  = ""
+                    if a_el:
+                        link = a_el["href"].split("?")[0]
+                        if not link.startswith("http"):
+                            link = "https://www.linkedin.com" + link
 
                     comp_el = (
-                        card.find(class_=re.compile(r"company|subtitle", re.I))
+                        card.find(class_=re.compile(r"base-search-card__subtitle|company-name|subtitle", re.I))
                         or card.find("h4")
                     )
                     company = comp_el.get_text(strip=True) if comp_el else ""
 
-                    loc_el   = card.find(class_=re.compile(r"location|locale", re.I))
-                    job_loc  = loc_el.get_text(strip=True) if loc_el else "Philippines"
+                    loc_el  = card.find(class_=re.compile(r"job-search-card__location|base-search-card__metadata|location", re.I))
+                    job_loc = loc_el.get_text(strip=True) if loc_el else "Philippines"
 
                     if title and link and "linkedin.com" in link:
                         jobs.append(make_job(title, company, link, "LinkedIn", job_loc))
 
-                time.sleep(1.0)  # be polite to LinkedIn
+                time.sleep(2.0)  # longer delay to avoid rate-limiting
             except Exception as e:
                 logger.debug(f"LinkedIn '{keywords}': {e}")
 
@@ -797,9 +835,9 @@ class JobScraper:
         return jobs
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  ★ NEW SOURCES ADDED BELOW
-# ═══════════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════
+    #  ★ NEW SOURCES ADDED BELOW (still inside JobScraper class)
+    # ═══════════════════════════════════════════════════════════════════════════
 
     # ─────────────────────────────────────────────────────────────────────────
     #  11. GLASSDOOR PH — Job listings + salary info
