@@ -31,12 +31,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ─── Config ────────────────────────────────────────────────────────────────────
-BOT_TOKEN               = os.environ.get("BOT_TOKEN", "")
-CHECK_INTERVAL_MINUTES  = int(os.environ.get("CHECK_INTERVAL_MINUTES", "60"))
-ADMIN_ID                = int(os.environ.get("ADMIN_ID", "0"))
-# Group/Channel ID kung saan mag-popost ng jobs (optional)
-# Example: -1001234567890  ← dapat negative number para sa groups
-GROUP_CHAT_ID           = os.environ.get("GROUP_CHAT_ID", "")
+BOT_TOKEN              = os.environ.get("BOT_TOKEN", "")
+CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "60"))
+ADMIN_ID               = int(os.environ.get("ADMIN_ID", "0"))
+# Group/Channel Chat ID where the bot will post jobs (optional)
+# Example: -1001234567890  ← must be a negative number for groups
+GROUP_CHAT_ID          = os.environ.get("GROUP_CHAT_ID", "")
 
 db      = Database()
 scraper = JobScraper()
@@ -67,16 +67,25 @@ SOURCE_ICONS = {
     "Trabaho.ph":    "🟠",
     "BossJob PH":    "⚫",
     "PhilJobNet":    "🇵🇭",
-    "RemoteOK":      "🔸",
+    "RemoteOK":         "🔸",
+    "Glassdoor PH":    "🟤",
+    "Monster PH":      "🟥",
+    "Upwork":          "🟩",
+    "Freelancer.com":  "🔹",
+    "JobsDB PH":       "🟦",
+    "BestJobs PH":     "🌟",
+    "OLX PH Jobs":     "🟧",
+    "Google Jobs":     "🔎",
+    "Telegram PH Jobs":"✈️",
 }
 
-# Trigger words para sa reply keyboard (hindi commands, text buttons siya)
-BTN_HELP     = "❓ Help"
-BTN_PRIVACY  = "📋 Terms & Privacy"
-BTN_JOBS     = "🔍 Pinakabagong Jobs"
-BTN_MENU     = "🏠 Menu"
-BTN_SUB      = "🔔 Subscribe"
-BTN_FILTER   = "⚙️ Job Filter"
+# Bottom reply keyboard button labels
+BTN_HELP    = "❓ Help"
+BTN_PRIVACY = "📋 Terms & Privacy"
+BTN_JOBS    = "🔍 Latest Jobs"
+BTN_MENU    = "🏠 Menu"
+BTN_SUB     = "🔔 Subscribe"
+BTN_FILTER  = "⚙️ Job Filter"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -85,38 +94,37 @@ BTN_FILTER   = "⚙️ Job Filter"
 
 def bottom_keyboard():
     """
-    Persistent na keyboard sa baba ng chat — laging visible sa personal messages.
-    Ito yung katulad ng screenshot mo: Help + Terms & Privacy buttons sa pinakababa.
-    Hindi ito lalabas sa group posts — para sa private chat lang.
+    Persistent keyboard at the bottom of the chat.
+    Only visible in private/direct messages — never shown in group posts.
     """
     return ReplyKeyboardMarkup(
         [
-            [KeyboardButton(BTN_JOBS), KeyboardButton(BTN_SUB)],
+            [KeyboardButton(BTN_JOBS),   KeyboardButton(BTN_SUB)],
             [KeyboardButton(BTN_FILTER), KeyboardButton(BTN_MENU)],
-            [KeyboardButton(BTN_HELP), KeyboardButton(BTN_PRIVACY)],
+            [KeyboardButton(BTN_HELP),   KeyboardButton(BTN_PRIVACY)],
         ],
-        resize_keyboard=True,       # mas maliit at maganda
-        is_persistent=True,         # hindi disappear kahit mag-type
-        input_field_placeholder="Piliin ang aksyon o mag-type ng command...",
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Choose an action or type a command...",
     )
 
 
 def main_menu_inline():
-    """Inline buttons sa loob ng message — para sa main menu."""
+    """Inline buttons inside the message — used for the main menu."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Pinakabagong Jobs",   callback_data="latest_jobs")],
+        [InlineKeyboardButton("🔍 Latest Jobs",         callback_data="latest_jobs")],
         [
-            InlineKeyboardButton("🔔 Mag-Subscribe",   callback_data="subscribe"),
-            InlineKeyboardButton("🔕 I-stop Alerts",   callback_data="unsubscribe"),
+            InlineKeyboardButton("🔔 Subscribe",        callback_data="subscribe"),
+            InlineKeyboardButton("🔕 Stop Alerts",      callback_data="unsubscribe"),
         ],
-        [InlineKeyboardButton("⚙️ Piliin ang Job Type", callback_data="filter_menu")],
+        [InlineKeyboardButton("⚙️ Choose Job Type",     callback_data="filter_menu")],
         [
-            InlineKeyboardButton("📊 Aking Status",    callback_data="my_status"),
-            InlineKeyboardButton("📈 Bot Stats",       callback_data="stats"),
+            InlineKeyboardButton("📊 My Status",        callback_data="my_status"),
+            InlineKeyboardButton("📈 Bot Stats",        callback_data="stats"),
         ],
         [
-            InlineKeyboardButton("❓ Help",            callback_data="help"),
-            InlineKeyboardButton("📋 Terms & Privacy", callback_data="privacy"),
+            InlineKeyboardButton("❓ Help",             callback_data="help"),
+            InlineKeyboardButton("📋 Terms & Privacy",  callback_data="privacy"),
         ],
     ])
 
@@ -126,70 +134,70 @@ def main_menu_inline():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 PRIVACY_TEXT = """
-📋 *Terms of Service at Privacy Policy*
+📋 *Terms of Service & Privacy Policy*
 ━━━━━━━━━━━━━━━━━━━━━━
 
-🤖 *Tungkol sa Bot Na Ito*
-Ang *Job Scrapper Bot* ay isang automated na serbisyo na nag-co-collect ng mga publikong job postings mula sa iba't ibang websites para sa kaginhawahan ng mga naghahanap ng trabaho.
+🤖 *About This Bot*
+*Job Scrapper PH* is an automated service that collects publicly available job postings from various websites to help job seekers in the Philippines find employment opportunities.
 
 ━━━━━━━━━━━━━━━━━━━━━━
-📌 *Mga Tuntunin ng Paggamit*
+📌 *Terms of Use*
 
-✅ *Pinapayagan:*
-• Gamitin para sa personal na paghahanap ng trabaho
-• I-share ang mga job listings sa mga kaibigan at pamilya
-• Mag-subscribe at mag-filter ng trabaho
+✅ *Allowed:*
+• Use for personal job searching
+• Share job listings with friends and family
+• Subscribe and filter jobs based on your preference
 
-❌ *Hindi Pinapayagan:*
-• Gumamit ng bot para sa spam o scam
-• Mag-post ng pekeng job listings
-• Gamitin para sa anumang illegal na layunin
-• Mag-scrape ng data ng bot para sa sariling bentahe
+❌ *Not Allowed:*
+• Using the bot for spam or scam activities
+• Posting fake job listings
+• Using for any illegal purpose
+• Scraping the bot's data for personal gain
 
 ━━━━━━━━━━━━━━━━━━━━━━
-🔒 *Privacy at Data*
+🔒 *Privacy & Data*
 
-• Kinokolekta namin ang iyong *Telegram User ID* at *pangalan* para mapadala ang job notifications.
-• *Hindi namin ibinibigay* ang iyong personal na impormasyon sa kahit sino.
-• *Hindi namin nino-noto* ang iyong mga mensahe o aktibidad sa labas ng bot.
-• Maaari mong i-request ang pagbura ng iyong data anumang oras sa pamamagitan ng /deletedata.
-• Ang iyong subscription at filter preferences ay naka-store sa aming database.
+• We only collect your *Telegram User ID* and *name* to send job notifications.
+• We *do not share* your personal information with anyone.
+• We *do not monitor* your messages or activities outside the bot.
+• You may request deletion of your data at any time using /deletedata.
+• Your subscription and filter preferences are stored in our database.
 
 ━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ *Disclaimer*
 
-• Ang bot na ito ay *hindi* nagga-garantiya ng katumpakan ng mga job listings.
-• Lahat ng job postings ay galing sa *panlabas na websites* — hindi kami ang employer.
-• *Palaging i-verify* ang legitimacy ng employer bago mag-apply.
-• Maging maingat sa mga nagtatanong ng *bayad para sa trabaho* — scam yan!
+• This bot does *not* guarantee the accuracy of job listings.
+• All job postings are sourced from *third-party websites* — we are not the employer.
+• Always *verify the legitimacy* of an employer before applying.
+• Be cautious of employers asking for *payment to get a job* — that is a scam!
 
 ━━━━━━━━━━━━━━━━━━━━━━
-📞 *Para sa Katanungan*
-Makipag-ugnayan sa admin ng bot kung may concerns ka.
+📞 *Contact*
+Reach out to the bot admin if you have any concerns or questions.
 
-_Ang patuloy na paggamit ng bot ay nangangahulugang sumasang-ayon ka sa mga tuntunin na ito._
+_By continuing to use this bot, you agree to these terms._
 """.strip()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  COMMANDS — PRIVATE CHAT ONLY
+#  COMMANDS — PRIVATE CHAT ONLY (unless stated)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Huwag mag-respond sa /start sa group
+    # Do not respond to /start in group chats
     if update.effective_chat.type != "private":
         return
 
-    user    = update.effective_user
-    is_new  = db.add_user(user.id, user.first_name or "Kabayan")
-    greeting = "Maligayang pagdating" if is_new else "Muli kang nakabalik"
+    user     = update.effective_user
+    is_new   = db.add_user(user.id, user.first_name or "there")
+    greeting = "Welcome" if is_new else "Welcome back"
 
     welcome = (
         f"👋 *{greeting}, {user.first_name}!*\n\n"
-        "Ako si *Job Scrapper Bot* 🤖🇵🇭\n"
-        "Tumutulong ako sa mga Pilipino na makahanap ng *legit at updated* na trabaho!\n\n"
+        "I'm *Job Scrapper PH* 🤖🇵🇭\n"
+        "I help Filipinos find *legit and updated* job opportunities!\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "💼 *Mga Trabahong Hinahanap Ko:*\n\n"
+        "💼 *Job Categories I Search:*\n\n"
         "📞 Call Center / BPO / CSR\n"
         "💻 Virtual Assistant (VA)\n"
         "🎰 POGO / Online Gaming\n"
@@ -199,59 +207,56 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📈 Sales / Marketing\n"
         "🏥 Healthcare / Nursing\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🌐 *Mga Pinagkukuhaan ng Jobs:*\n"
+        "🌐 *Job Sources:*\n"
         "Indeed PH • JobStreet • LinkedIn\n"
         "OnlineJobs.ph • Kalibrr • Jooble\n"
         "Trabaho.ph • BossJob • PhilJobNet\n\n"
-        "📲 *Gamitin ang mga button sa baba para magsimula!* 👇"
+        "📲 *Use the buttons below to get started!* 👇"
     )
 
-    # Ipadala ang welcome + inline menu + persistent bottom keyboard
     await update.message.reply_text(
         welcome,
         parse_mode="Markdown",
-        reply_markup=bottom_keyboard(),   # ← ito ang persistent sa baba
+        reply_markup=bottom_keyboard(),
     )
-    # Sundan ng inline menu
     await update.message.reply_text(
-        "🏠 *Pangunahing Menu:*",
+        "🏠 *Main Menu:*",
         parse_mode="Markdown",
         reply_markup=main_menu_inline(),
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Huwag mag-respond sa group
     if update.effective_chat.type != "private":
         return
 
     text = (
-        "❓ *Tulong / Help*\n\n"
+        "❓ *Help & Commands*\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "📱 *Mga Available na Commands:*\n\n"
-        "/start — Pangunahing menu\n"
-        "/jobs — Pinakabagong 15 job posts\n"
-        "/subscribe — Mag-on ng job alerts\n"
-        "/unsubscribe — Mag-off ng notifications\n"
-        "/filter — Piliin ang klase ng trabaho\n"
-        "/status — Tingnan ang iyong settings\n"
-        "/stats — Mga bilang at statistics\n"
-        "/privacy — Terms at Privacy Policy\n"
-        "/deletedata — Burahin ang iyong data\n\n"
+        "📱 *Available Commands:*\n\n"
+        "/start — Main menu\n"
+        "/jobs — Show latest 15 job posts\n"
+        "/subscribe — Turn on job alert notifications\n"
+        "/unsubscribe — Turn off notifications\n"
+        "/filter — Choose your preferred job type\n"
+        "/status — View your subscription settings\n"
+        "/stats — Bot statistics\n"
+        "/privacy — Terms & Privacy Policy\n"
+        "/deletedata — Delete your personal data\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🔔 *Paano gumagana ang bot?*\n\n"
-        "1️⃣ I-tap ang 🔔 *Subscribe* button\n"
-        "2️⃣ Piliin ang gusto mong *job type* sa Filter\n"
-        "3️⃣ Aabisuhan ka ng bot kapag may *bagong posting*!\n\n"
+        "🔔 *How does the bot work?*\n\n"
+        "1️⃣ Tap the 🔔 *Subscribe* button\n"
+        "2️⃣ Choose your preferred *job type* via Filter\n"
+        "3️⃣ The bot will notify you whenever a *new job is posted*!\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "⏱ *Gaano kadalas mag-update?*\n"
-        f"Bawat *{CHECK_INTERVAL_MINUTES} minuto* nag-che-check ang bot ng bagong jobs.\n\n"
+        f"⏱ *How often does it update?*\n"
+        f"Every *{CHECK_INTERVAL_MINUTES} minutes* the bot checks for new jobs.\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "💡 *Mga Tips:*\n"
-        "• Mag-filter ng specific job type para mas relevant ang notifications\n"
-        "• Maging maingat sa mga employer na nagtatanong ng bayad — scam yan!\n"
-        "• I-verify palagi ang legitimacy ng company bago mag-apply\n\n"
-        "🆘 Kung may problema o tanong, makipag-ugnayan sa admin."
+        "💡 *Tips:*\n"
+        "• Set a job filter so you only get relevant notifications\n"
+        "• Never pay to get a job — that's a scam!\n"
+        "• Always verify the employer before applying\n\n"
+        "🆘 Contact the bot admin if you have any issues."
     )
     await update.message.reply_text(
         text,
@@ -261,10 +266,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Huwag mag-respond sa group
     if update.effective_chat.type != "private":
         return
-
     await update.message.reply_text(
         PRIVACY_TEXT,
         parse_mode="Markdown",
@@ -273,16 +276,15 @@ async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def jobs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Sa group: walang filter, mag-post lang ng latest
     is_private = update.effective_chat.type == "private"
     if is_private:
         user_data   = db.get_user(update.effective_user.id)
-        user_filter = user_data.get("filters", "Lahat") if user_data else "Lahat"
+        user_filter = user_data.get("filters", "All") if user_data else "All"
     else:
-        user_filter = "Lahat"
+        user_filter = "All"
 
     await update.message.reply_text(
-        "⏳ *Sandali lang, hinahanap ko ang mga jobs...*",
+        "⏳ *Please wait, fetching the latest jobs...*",
         parse_mode="Markdown",
     )
     await send_latest_jobs(
@@ -297,19 +299,19 @@ async def jobs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type != "private":
         await update.message.reply_text(
-            "💬 Para mag-subscribe ng personal job alerts, mag-message sa akin directly!\n"
-            "I-click ang aking username para mag-private message. 😊"
+            "💬 To subscribe for personal job alerts, send me a direct message!\n"
+            "Click my username to start a private chat. 😊"
         )
         return
 
     user = update.effective_user
-    db.add_user(user.id, user.first_name or "Kabayan")
+    db.add_user(user.id, user.first_name or "there")
     db.subscribe_user(user.id)
     await update.message.reply_text(
-        "🔔 *Naka-subscribe ka na!*\n\n"
-        "✅ Aabisuhan kita tuwing may bagong job posting.\n"
-        "⚙️ I-tap ang *Job Filter* para piliin ang specific na trabaho.\n"
-        "🔕 I-tap ang *I-stop Alerts* para ihinto.",
+        "🔔 *You are now subscribed!*\n\n"
+        "✅ You will be notified whenever new jobs are posted.\n"
+        "⚙️ Tap *Job Filter* to choose your preferred job type.\n"
+        "🔕 Tap *Stop Alerts* to unsubscribe anytime.",
         parse_mode="Markdown",
         reply_markup=main_menu_inline(),
     )
@@ -320,9 +322,9 @@ async def unsubscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     db.unsubscribe_user(update.effective_user.id)
     await update.message.reply_text(
-        "🔕 *Na-off na ang iyong job alerts.*\n\n"
-        "Hindi ka na makakatanggap ng notifications.\n"
-        "I-tap ang 🔔 *Subscribe* para bumalik anumang oras! 😊",
+        "🔕 *Job alerts have been turned off.*\n\n"
+        "You will no longer receive notifications.\n"
+        "Tap 🔔 *Subscribe* to turn them back on anytime! 😊",
         parse_mode="Markdown",
         reply_markup=main_menu_inline(),
     )
@@ -332,19 +334,19 @@ async def filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type != "private":
         return
     keyboard = [
-        [InlineKeyboardButton("📋 Lahat ng Trabaho",      callback_data="filter_all")],
-        [InlineKeyboardButton("📞 Call Center / BPO",     callback_data="filter_callcenter")],
+        [InlineKeyboardButton("📋 All Jobs",               callback_data="filter_all")],
+        [InlineKeyboardButton("📞 Call Center / BPO",      callback_data="filter_callcenter")],
         [InlineKeyboardButton("💻 Virtual Assistant (VA)", callback_data="filter_va")],
-        [InlineKeyboardButton("🎰 POGO / Online Gaming",  callback_data="filter_pogo")],
-        [InlineKeyboardButton("🏠 Remote / Work From Home", callback_data="filter_remote")],
-        [InlineKeyboardButton("💰 Accounting / Finance",  callback_data="filter_accounting")],
-        [InlineKeyboardButton("🖥️ IT / Tech Support",     callback_data="filter_it")],
-        [InlineKeyboardButton("📈 Sales / Marketing",     callback_data="filter_sales")],
-        [InlineKeyboardButton("🏥 Healthcare / Nursing",  callback_data="filter_healthcare")],
+        [InlineKeyboardButton("🎰 POGO / Online Gaming",   callback_data="filter_pogo")],
+        [InlineKeyboardButton("🏠 Remote / Work From Home",callback_data="filter_remote")],
+        [InlineKeyboardButton("💰 Accounting / Finance",   callback_data="filter_accounting")],
+        [InlineKeyboardButton("🖥️ IT / Tech Support",      callback_data="filter_it")],
+        [InlineKeyboardButton("📈 Sales / Marketing",      callback_data="filter_sales")],
+        [InlineKeyboardButton("🏥 Healthcare / Nursing",   callback_data="filter_healthcare")],
     ]
     await update.message.reply_text(
-        "⚙️ *Piliin ang Job Type na gusto mo:*\n\n"
-        "Matatanggap mo lang ang notifications para sa napiling klase ng trabaho.",
+        "⚙️ *Choose your preferred Job Type:*\n\n"
+        "You will only receive notifications for the selected category.",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
@@ -356,21 +358,21 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = db.get_user(update.effective_user.id)
     if not user_data:
         await update.message.reply_text(
-            "Wala pa akong record sa iyo. I-type /start para magsimula! 😊"
+            "No account found. Type /start to register! 😊"
         )
         return
 
-    is_sub     = bool(user_data["subscribed"])
-    user_filter = user_data["filters"] or "Lahat"
-    sub_icon   = "🟢" if is_sub else "🔴"
-    sub_text   = "AKTIBO — tumatanggap ka ng alerts" if is_sub else "HINDI AKTIBO"
+    is_sub      = bool(user_data["subscribed"])
+    user_filter = user_data["filters"] or "All"
+    sub_icon    = "🟢" if is_sub else "🔴"
+    sub_text    = "ACTIVE — you are receiving alerts" if is_sub else "INACTIVE — notifications are off"
 
     await update.message.reply_text(
-        f"📊 *Iyong Account Status:*\n\n"
+        f"📊 *Your Account Status:*\n\n"
         f"{sub_icon} Subscription: {sub_text}\n"
         f"⚙️ Job Filter: *{user_filter}*\n"
-        f"📅 Sumali noong: {str(user_data['joined_at'])[:10]}\n\n"
-        f"I-tap ang ⚙️ *Job Filter* para baguhin ang preference.",
+        f"📅 Joined: {str(user_data['joined_at'])[:10]}\n\n"
+        f"Tap ⚙️ *Job Filter* to change your preference.",
         parse_mode="Markdown",
         reply_markup=main_menu_inline(),
     )
@@ -379,11 +381,11 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type != "private":
         return
-    total_users  = db.count_users()
-    subscribed   = db.count_subscribed()
-    total_jobs   = db.count_jobs()
-    jobs_today   = db.count_jobs_today()
-    sources      = db.count_by_source()
+    total_users = db.count_users()
+    subscribed  = db.count_subscribed()
+    total_jobs  = db.count_jobs()
+    jobs_today  = db.count_jobs_today()
+    sources     = db.count_by_source()
 
     source_lines = "\n".join(
         f"  {SOURCE_ICONS.get(s['source'], '•')} {s['source']}: {s['count']} jobs"
@@ -392,56 +394,54 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"📈 *Bot Statistics:*\n\n"
-        f"👥 Kabuuang Users: *{total_users}*\n"
-        f"🔔 Naka-subscribe: *{subscribed}*\n"
-        f"💼 Kabuuang Jobs na Nakita: *{total_jobs}*\n"
-        f"🆕 Bagong Jobs Ngayon: *{jobs_today}*\n\n"
-        f"📡 *Jobs per Source:*\n{source_lines or '  Wala pang data'}",
+        f"👥 Total Users: *{total_users}*\n"
+        f"🔔 Subscribed: *{subscribed}*\n"
+        f"💼 Total Jobs Found: *{total_jobs}*\n"
+        f"🆕 New Jobs Today: *{jobs_today}*\n\n"
+        f"📡 *Jobs per Source:*\n{source_lines or '  No data yet'}",
         parse_mode="Markdown",
     )
 
 
 async def delete_data_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Para sa GDPR/privacy compliance — users can delete their data."""
+    """GDPR/privacy compliance — users can delete their data."""
     if update.effective_chat.type != "private":
         return
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ Oo, burahin ang aking data", callback_data="confirm_delete"),
-            InlineKeyboardButton("❌ Hindi, i-cancel",            callback_data="cancel_delete"),
+            InlineKeyboardButton("✅ Yes, delete my data", callback_data="confirm_delete"),
+            InlineKeyboardButton("❌ Cancel",              callback_data="cancel_delete"),
         ]
     ])
     await update.message.reply_text(
-        "⚠️ *Sigurado ka bang gusto mong burahin ang iyong data?*\n\n"
-        "Mabubura ang:\n"
-        "• Iyong subscription\n"
-        "• Job filter preference\n"
-        "• Lahat ng iyong stored na impormasyon\n\n"
-        "_Hindi na ito mababawi._",
+        "⚠️ *Are you sure you want to delete your data?*\n\n"
+        "This will remove:\n"
+        "• Your subscription\n"
+        "• Your job filter preference\n"
+        "• All your stored information\n\n"
+        "_This action cannot be undone._",
         parse_mode="Markdown",
         reply_markup=keyboard,
     )
 
 
 async def scrape_now_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin only — force scrape now."""
+    """Admin only — force an immediate scrape."""
     user_id = update.effective_user.id
     if ADMIN_ID and user_id != ADMIN_ID:
-        await update.message.reply_text("⛔ Admin only ang command na ito.")
+        await update.message.reply_text("⛔ This command is for admins only.")
         return
-    await update.message.reply_text("🔍 Sisimulan ko ang manual scraping ngayon...")
+    await update.message.reply_text("🔍 Starting manual scrape now...")
     await broadcast_new_jobs(context.bot)
-    await update.message.reply_text("✅ Tapos na ang scraping!")
+    await update.message.reply_text("✅ Scraping complete!")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  REPLY KEYBOARD BUTTON HANDLER
-#  (Ginagawa itong text message handler para sa bottom keyboard buttons)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def reply_keyboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles ang mga text na galing sa persistent bottom keyboard buttons."""
-    # Sa group chat, huwag pansinin ang mga text na ito
+    """Handles text messages triggered by the persistent bottom keyboard buttons."""
     if update.effective_chat.type != "private":
         return
 
@@ -454,9 +454,8 @@ async def reply_keyboard_handler(update: Update, context: ContextTypes.DEFAULT_T
     elif text == BTN_JOBS:
         await jobs_command(update, context)
     elif text == BTN_MENU:
-        # Ipakita ang inline main menu
         await update.message.reply_text(
-            "🏠 *Pangunahing Menu:*",
+            "🏠 *Main Menu:*",
             parse_mode="Markdown",
             reply_markup=main_menu_inline(),
         )
@@ -465,9 +464,9 @@ async def reply_keyboard_handler(update: Update, context: ContextTypes.DEFAULT_T
     elif text == BTN_FILTER:
         await filter_command(update, context)
     else:
-        # Unknown text
         await update.message.reply_text(
-            "Hindi ko maintindihan yun. 😅 Gamitin ang mga button sa baba o i-type /help.",
+            "I didn't understand that. 😅\n"
+            "Use the buttons below or type /help to see all commands.",
             reply_markup=main_menu_inline(),
         )
 
@@ -484,51 +483,53 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "latest_jobs":
         user_data   = db.get_user(user.id)
-        user_filter = user_data.get("filters", "Lahat") if user_data else "Lahat"
+        user_filter = user_data.get("filters", "All") if user_data else "All"
         await query.message.reply_text(
-            "⏳ *Sandali lang, hinahanap ko ang mga jobs...*", parse_mode="Markdown"
+            "⏳ *Please wait, fetching the latest jobs...*",
+            parse_mode="Markdown",
         )
         await send_latest_jobs(query.message.chat_id, context.bot, limit=15, category_filter=user_filter)
 
     elif data == "subscribe":
-        db.add_user(user.id, user.first_name or "Kabayan")
+        db.add_user(user.id, user.first_name or "there")
         db.subscribe_user(user.id)
         await query.message.reply_text(
-            "🔔 *Naka-subscribe ka na!*\n\n"
-            "✅ Aabisuhan kita ng bagong job posts.\n"
-            "⚙️ I-tap ang Job Filter para piliin ang specific na trabaho.",
+            "🔔 *You are now subscribed!*\n\n"
+            "✅ You will be notified when new jobs are posted.\n"
+            "⚙️ Use Job Filter to choose a specific job type.",
             parse_mode="Markdown",
         )
 
     elif data == "unsubscribe":
         db.unsubscribe_user(user.id)
         await query.message.reply_text(
-            "🔕 *Na-off na ang iyong alerts.*\n"
-            "I-tap ang 🔔 Subscribe para bumalik anumang oras.",
+            "🔕 *Alerts have been turned off.*\n"
+            "Tap 🔔 Subscribe to turn them back on anytime.",
             parse_mode="Markdown",
         )
 
     elif data == "filter_menu":
         keyboard = [
-            [InlineKeyboardButton("📋 Lahat ng Trabaho",       callback_data="filter_all")],
-            [InlineKeyboardButton("📞 Call Center / BPO",      callback_data="filter_callcenter")],
+            [InlineKeyboardButton("📋 All Jobs",                callback_data="filter_all")],
+            [InlineKeyboardButton("📞 Call Center / BPO",       callback_data="filter_callcenter")],
             [InlineKeyboardButton("💻 Virtual Assistant (VA)",  callback_data="filter_va")],
-            [InlineKeyboardButton("🎰 POGO / Online Gaming",   callback_data="filter_pogo")],
+            [InlineKeyboardButton("🎰 POGO / Online Gaming",    callback_data="filter_pogo")],
             [InlineKeyboardButton("🏠 Remote / Work From Home", callback_data="filter_remote")],
-            [InlineKeyboardButton("💰 Accounting / Finance",   callback_data="filter_accounting")],
-            [InlineKeyboardButton("🖥️ IT / Tech Support",      callback_data="filter_it")],
-            [InlineKeyboardButton("📈 Sales / Marketing",      callback_data="filter_sales")],
-            [InlineKeyboardButton("🏥 Healthcare / Nursing",   callback_data="filter_healthcare")],
+            [InlineKeyboardButton("💰 Accounting / Finance",    callback_data="filter_accounting")],
+            [InlineKeyboardButton("🖥️ IT / Tech Support",       callback_data="filter_it")],
+            [InlineKeyboardButton("📈 Sales / Marketing",       callback_data="filter_sales")],
+            [InlineKeyboardButton("🏥 Healthcare / Nursing",    callback_data="filter_healthcare")],
         ]
         await query.message.reply_text(
-            "⚙️ *Piliin ang Job Type na gusto mo:*",
+            "⚙️ *Choose your preferred Job Type:*\n\n"
+            "You will only receive notifications for the selected category.",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
 
     elif data.startswith("filter_"):
         filter_map = {
-            "filter_all":        "Lahat",
+            "filter_all":        "All",
             "filter_callcenter": "Call Center / BPO",
             "filter_va":         "Virtual Assistant",
             "filter_pogo":       "POGO / Online Gaming",
@@ -538,29 +539,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "filter_sales":      "Sales / Marketing",
             "filter_healthcare": "Healthcare",
         }
-        chosen = filter_map.get(data, "Lahat")
-        db.add_user(user.id, user.first_name or "Kabayan")
+        chosen = filter_map.get(data, "All")
+        db.add_user(user.id, user.first_name or "there")
         db.set_filter(user.id, chosen)
         icon = CATEGORY_ICONS.get(chosen, "💼")
         await query.message.reply_text(
-            f"✅ *Na-set ang filter mo sa:*\n{icon} *{chosen}*\n\n"
-            f"Mga {chosen} jobs lang ang ipapakita sa iyo.",
+            f"✅ *Filter set to:*\n{icon} *{chosen}*\n\n"
+            f"You will now only receive *{chosen}* job notifications.",
             parse_mode="Markdown",
         )
 
     elif data == "my_status":
         user_data = db.get_user(user.id)
         if not user_data:
-            await query.message.reply_text("I-type /start muna para mag-register. 😊")
+            await query.message.reply_text("Type /start first to register. 😊")
             return
-        is_sub    = bool(user_data["subscribed"])
-        sub_icon  = "🟢" if is_sub else "🔴"
-        sub_text  = "AKTIBO" if is_sub else "HINDI AKTIBO"
+        is_sub   = bool(user_data["subscribed"])
+        sub_icon = "🟢" if is_sub else "🔴"
+        sub_text = "ACTIVE" if is_sub else "INACTIVE"
         await query.message.reply_text(
-            f"📊 *Iyong Status:*\n\n"
+            f"📊 *Your Status:*\n\n"
             f"{sub_icon} Subscription: *{sub_text}*\n"
-            f"⚙️ Filter: *{user_data.get('filters', 'Lahat')}*\n"
-            f"📅 Sumali: {str(user_data['joined_at'])[:10]}",
+            f"⚙️ Filter: *{user_data.get('filters', 'All')}*\n"
+            f"📅 Joined: {str(user_data['joined_at'])[:10]}",
             parse_mode="Markdown",
         )
 
@@ -571,24 +572,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         jobs_today  = db.count_jobs_today()
         await query.message.reply_text(
             f"📈 *Bot Statistics:*\n\n"
-            f"👥 Kabuuang Users: *{total_users}*\n"
-            f"🔔 Naka-subscribe: *{subscribed}*\n"
-            f"💼 Kabuuang Jobs na Nakita: *{total_jobs}*\n"
-            f"🆕 Bagong Jobs Ngayon: *{jobs_today}*",
+            f"👥 Total Users: *{total_users}*\n"
+            f"🔔 Subscribed: *{subscribed}*\n"
+            f"💼 Total Jobs Found: *{total_jobs}*\n"
+            f"🆕 New Jobs Today: *{jobs_today}*",
             parse_mode="Markdown",
         )
 
     elif data == "help":
         await query.message.reply_text(
-            "❓ *Tulong / Help*\n\n"
-            "Gamitin ang mga button sa menu o i-type ang mga commands:\n\n"
-            "/jobs — Pinakabagong jobs\n"
-            "/subscribe — Mag-on ng alerts\n"
-            "/unsubscribe — Mag-off ng alerts\n"
-            "/filter — Piliin ang job type\n"
-            "/status — Tingnan ang settings\n"
-            "/privacy — Terms at Privacy\n"
-            "/deletedata — Burahin ang iyong data",
+            "❓ *Help*\n\n"
+            "Use the menu buttons or type these commands:\n\n"
+            "/jobs — Latest job postings\n"
+            "/subscribe — Turn on alerts\n"
+            "/unsubscribe — Turn off alerts\n"
+            "/filter — Choose job type\n"
+            "/status — View your settings\n"
+            "/privacy — Terms & Privacy Policy\n"
+            "/deletedata — Delete your data",
             parse_mode="Markdown",
             reply_markup=main_menu_inline(),
         )
@@ -603,16 +604,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "confirm_delete":
         db.delete_user(user.id)
         await query.message.reply_text(
-            "✅ *Nabura na ang iyong data.*\n\n"
-            "Salamat sa paggamit ng Job Scrapper Bot!\n"
-            "I-type /start para magsimula ulit kung gusto mo.",
+            "✅ *Your data has been deleted.*\n\n"
+            "Thank you for using Job Scrapper PH!\n"
+            "Type /start anytime if you want to use it again.",
             parse_mode="Markdown",
         )
 
     elif data == "cancel_delete":
         await query.message.reply_text(
-            "❌ *Na-cancel ang pagbura ng data.*\n"
-            "Ang iyong impormasyon ay ligtas pa rin.",
+            "❌ *Data deletion cancelled.*\n"
+            "Your information is safe.",
             parse_mode="Markdown",
             reply_markup=main_menu_inline(),
         )
@@ -626,10 +627,10 @@ async def send_latest_jobs(
     chat_id: int,
     bot,
     limit: int = 15,
-    category_filter: str = "Lahat",
+    category_filter: str = "All",
     is_group: bool = False,
 ):
-    if category_filter and category_filter != "Lahat":
+    if category_filter and category_filter != "All":
         jobs = db.get_latest_jobs_by_category(category=category_filter, limit=limit)
     else:
         jobs = db.get_latest_jobs(limit=limit)
@@ -638,17 +639,18 @@ async def send_latest_jobs(
         await bot.send_message(
             chat_id=chat_id,
             text=(
-                "😔 *Wala pang nakuhang jobs sa ngayon.*\n\n"
-                "Mag-antay sandali — bawat ilang minuto ay nag-che-check ang bot. 🙏"
+                "😔 *No jobs found at the moment.*\n\n"
+                "Please wait — the bot checks for new postings every few minutes. "
+                "Try again shortly! 🙏"
             ),
             parse_mode="Markdown",
         )
         return
 
-    filter_text = f" ({category_filter})" if category_filter != "Lahat" else ""
+    filter_text = f" ({category_filter})" if category_filter != "All" else ""
     await bot.send_message(
         chat_id=chat_id,
-        text=f"💼 *{len(jobs)} Pinakabagong Jobs{filter_text}:*",
+        text=f"💼 *{len(jobs)} Latest Jobs{filter_text}:*",
         parse_mode="Markdown",
     )
 
@@ -676,17 +678,16 @@ def format_job_message(job: dict, is_group: bool = False) -> str:
 
     msg = (
         f"{icon} *{job['title']}*\n"
-        f"🏢 {job.get('company', 'Hindi nabanggit')}\n"
+        f"🏢 {job.get('company', 'Not specified')}\n"
         f"📂 {category}\n"
         f"📍 {job.get('location', 'Philippines')}"
         f"{salary}\n"
         f"{src_icon} {source} · 📅 {date_str}\n"
-        f"🔗 [I-apply dito!]({job['link']})"
+        f"🔗 [Apply here!]({job['link']})"
     )
 
-    # Sa group post, dagdag ng reminder para sa safety
     if is_group:
-        msg += "\n\n⚠️ _Palaging i-verify ang employer bago mag-apply. Maging maingat sa scam!_"
+        msg += "\n\n⚠️ _Always verify the employer before applying. Never pay to get a job — that's a scam!_"
 
     return msg
 
@@ -696,10 +697,10 @@ def format_job_message(job: dict, is_group: bool = False) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def broadcast_new_jobs(bot):
-    logger.info("🔍 Nagsisimula ang job scraping...")
+    logger.info("🔍 Starting job scrape...")
     try:
         new_jobs = await scraper.scrape_all()
-        logger.info(f"✅ Nakakuha ng {len(new_jobs)} potential jobs")
+        logger.info(f"✅ Fetched {len(new_jobs)} potential jobs")
     except Exception as e:
         logger.error(f"Scraping error: {e}")
         return
@@ -709,26 +710,26 @@ async def broadcast_new_jobs(bot):
         if db.save_job(job):
             saved_jobs.append(job)
 
-    logger.info(f"🆕 {len(saved_jobs)} bagong (unique) jobs ang na-save")
+    logger.info(f"🆕 {len(saved_jobs)} new unique jobs saved")
     if not saved_jobs:
-        logger.info("Walang bagong jobs — walang ibe-broadcast.")
+        logger.info("No new jobs found — nothing to broadcast.")
         return
 
-    # ── 1. Mag-post sa GROUP (kung may GROUP_CHAT_ID) ──────────────────────────
+    # ── 1. Post to GROUP (if GROUP_CHAT_ID is set) ─────────────────────────────
     if GROUP_CHAT_ID:
         try:
             total = len(saved_jobs)
             await bot.send_message(
                 chat_id=GROUP_CHAT_ID,
                 text=(
-                    f"📢 *{total} BAGONG JOB POSTING{'S' if total > 1 else ''}!* 🇵🇭\n"
+                    f"📢 *{total} NEW JOB POSTING{'S' if total > 1 else ''}!* 🇵🇭\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"Narito ang mga pinakabago para sa inyo, mga Kabayan! 💪\n"
-                    f"⚠️ _Palaging i-verify ang legitimacy ng employer. Huwag magbayad para sa trabaho — scam yan!_"
+                    f"Here are the latest opportunities for you! 💪\n"
+                    f"⚠️ _Always verify the employer's legitimacy. Never pay to get a job — that's a scam!_"
                 ),
                 parse_mode="Markdown",
             )
-            for job in saved_jobs[:10]:  # max 10 sa group para hindi spam
+            for job in saved_jobs[:10]:
                 await bot.send_message(
                     chat_id=GROUP_CHAT_ID,
                     text=format_job_message(job, is_group=True),
@@ -740,22 +741,22 @@ async def broadcast_new_jobs(bot):
             if total > 10:
                 await bot.send_message(
                     chat_id=GROUP_CHAT_ID,
-                    text=f"➕ At *{total - 10} pa* na bagong jobs!\nMag-PM sa bot para makita lahat: /jobs",
+                    text=f"➕ *{total - 10} more* new jobs available!\nMessage the bot directly to see all: /jobs",
                     parse_mode="Markdown",
                 )
-            logger.info(f"✅ Naka-post sa group {GROUP_CHAT_ID}: {min(total, 10)} jobs")
+            logger.info(f"✅ Posted to group {GROUP_CHAT_ID}: {min(total, 10)} jobs")
         except Exception as e:
             logger.error(f"Group broadcast error: {e}")
 
-    # ── 2. Mag-send sa individual SUBSCRIBERS ─────────────────────────────────
+    # ── 2. Send to individual SUBSCRIBERS ──────────────────────────────────────
     subscribers = db.get_subscribers()
-    logger.info(f"📤 Magse-send sa {len(subscribers)} personal subscribers")
+    logger.info(f"📤 Sending to {len(subscribers)} personal subscribers")
 
     for user in subscribers:
-        user_filter  = user.get("filters", "Lahat")
+        user_filter  = user.get("filters", "All")
         jobs_to_send = [
             j for j in saved_jobs
-            if user_filter == "Lahat" or j.get("category") == user_filter
+            if user_filter == "All" or j.get("category") == user_filter
         ]
         if not jobs_to_send:
             continue
@@ -765,8 +766,8 @@ async def broadcast_new_jobs(bot):
             await bot.send_message(
                 chat_id=user["user_id"],
                 text=(
-                    f"🔔 *{total} BAGONG JOB POSTING{'S' if total > 1 else ''} PARA SA IYO!* 🇵🇭\n\n"
-                    f"Narito ang pinakabago. Huwag palampasin! 💪"
+                    f"🔔 *{total} NEW JOB POSTING{'S' if total > 1 else ''} FOR YOU!* 🇵🇭\n\n"
+                    f"Here are the latest jobs. Don't miss out! 💪"
                 ),
                 parse_mode="Markdown",
             )
@@ -782,7 +783,7 @@ async def broadcast_new_jobs(bot):
             if total > 5:
                 await bot.send_message(
                     chat_id=user["user_id"],
-                    text=f"➕ At *{total - 5} pa* na bagong jobs! I-type /jobs para makita lahat.",
+                    text=f"➕ *{total - 5} more* new jobs available! Type /jobs to see all.",
                     parse_mode="Markdown",
                 )
         except Exception as e:
@@ -805,33 +806,27 @@ def main():
     if GROUP_CHAT_ID:
         logger.info(f"📢 Group posting enabled: {GROUP_CHAT_ID}")
     else:
-        logger.info("ℹ️ Walang GROUP_CHAT_ID — personal subscriber broadcast lang ang gagana.")
+        logger.info("ℹ️ No GROUP_CHAT_ID set — personal subscriber broadcast only.")
 
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Commands
-    app.add_handler(CommandHandler("start",        start))
-    app.add_handler(CommandHandler("help",         help_command))
-    app.add_handler(CommandHandler("privacy",      privacy_command))
-    app.add_handler(CommandHandler("jobs",         jobs_command))
-    app.add_handler(CommandHandler("subscribe",    subscribe_command))
-    app.add_handler(CommandHandler("unsubscribe",  unsubscribe_command))
-    app.add_handler(CommandHandler("filter",       filter_command))
-    app.add_handler(CommandHandler("status",       status_command))
-    app.add_handler(CommandHandler("stats",        stats_command))
-    app.add_handler(CommandHandler("deletedata",   delete_data_command))
-    app.add_handler(CommandHandler("scrapnow",     scrape_now_command))
-
-    # Inline button callbacks
+    app.add_handler(CommandHandler("start",       start))
+    app.add_handler(CommandHandler("help",        help_command))
+    app.add_handler(CommandHandler("privacy",     privacy_command))
+    app.add_handler(CommandHandler("jobs",        jobs_command))
+    app.add_handler(CommandHandler("subscribe",   subscribe_command))
+    app.add_handler(CommandHandler("unsubscribe", unsubscribe_command))
+    app.add_handler(CommandHandler("filter",      filter_command))
+    app.add_handler(CommandHandler("status",      status_command))
+    app.add_handler(CommandHandler("stats",       stats_command))
+    app.add_handler(CommandHandler("deletedata",  delete_data_command))
+    app.add_handler(CommandHandler("scrapnow",    scrape_now_command))
     app.add_handler(CallbackQueryHandler(button_handler))
-
-    # Persistent reply keyboard button handler (text messages sa private chat)
     app.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
         reply_keyboard_handler,
     ))
 
-    # Scheduler
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         broadcast_new_jobs,
@@ -841,9 +836,9 @@ def main():
         next_run_time=datetime.now(),
     )
     scheduler.start()
-    logger.info(f"⏱ Scheduler started — nag-che-check bawat {CHECK_INTERVAL_MINUTES} minuto")
+    logger.info(f"⏱ Scheduler started — checking every {CHECK_INTERVAL_MINUTES} minutes")
 
-    logger.info("🤖 Job Scrapper Bot ay tumatakbo na!")
+    logger.info("🤖 Job Scrapper PH is now running!")
     app.run_polling(drop_pending_updates=True)
 
 
