@@ -22,7 +22,7 @@ class Database:
                 user_id     INTEGER PRIMARY KEY,
                 name        TEXT,
                 subscribed  INTEGER DEFAULT 1,
-                filters     TEXT DEFAULT 'Lahat',
+                filters     TEXT DEFAULT 'All',
                 joined_at   TEXT DEFAULT (datetime('now', '+8 hours'))
             );
 
