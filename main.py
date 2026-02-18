@@ -130,7 +130,7 @@ PRIVACY_TEXT = """
 ━━━━━━━━━━━━━━━━━━━━━━
 
 🤖 *Tungkol sa Bot Na Ito*
-Ang *PH Job Finder Bot* ay isang automated na serbisyo na nag-co-collect ng mga publikong job postings mula sa iba't ibang websites para sa kaginhawahan ng mga naghahanap ng trabaho.
+Ang *Job Scrapper Bot* ay isang automated na serbisyo na nag-co-collect ng mga publikong job postings mula sa iba't ibang websites para sa kaginhawahan ng mga naghahanap ng trabaho.
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📌 *Mga Tuntunin ng Paggamit*
@@ -186,7 +186,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     welcome = (
         f"👋 *{greeting}, {user.first_name}!*\n\n"
-        "Ako si *PH Job Finder Bot* 🤖🇵🇭\n"
+        "Ako si *Job Scrapper Bot* 🤖🇵🇭\n"
         "Tumutulong ako sa mga Pilipino na makahanap ng *legit at updated* na trabaho!\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "💼 *Mga Trabahong Hinahanap Ko:*\n\n"
@@ -604,7 +604,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.delete_user(user.id)
         await query.message.reply_text(
             "✅ *Nabura na ang iyong data.*\n\n"
-            "Salamat sa paggamit ng PH Job Finder Bot!\n"
+            "Salamat sa paggamit ng Job Scrapper Bot!\n"
             "I-type /start para magsimula ulit kung gusto mo.",
             parse_mode="Markdown",
         )
@@ -843,7 +843,7 @@ def main():
     scheduler.start()
     logger.info(f"⏱ Scheduler started — nag-che-check bawat {CHECK_INTERVAL_MINUTES} minuto")
 
-    logger.info("🤖 PH Job Finder Bot ay tumatakbo na!")
+    logger.info("🤖 Job Scrapper Bot ay tumatakbo na!")
     app.run_polling(drop_pending_updates=True)
 
 
