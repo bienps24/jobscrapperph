@@ -280,6 +280,9 @@ async def jobs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_private:
         user_data   = db.get_user(update.effective_user.id)
         user_filter = user_data.get("filters", "All") if user_data else "All"
+        # Backward compat: treat old 'Lahat' default as 'All'
+        if user_filter == "Lahat":
+            user_filter = "All"
     else:
         user_filter = "All"
 
@@ -756,7 +759,7 @@ async def broadcast_new_jobs(bot):
         user_filter  = user.get("filters", "All")
         jobs_to_send = [
             j for j in saved_jobs
-            if user_filter == "All" or j.get("category") == user_filter
+            if user_filter in ("All", "Lahat") or j.get("category") == user_filter
         ]
         if not jobs_to_send:
             continue
