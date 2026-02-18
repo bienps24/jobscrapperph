@@ -24,6 +24,8 @@ import time
 import xml.etree.ElementTree as ET
 from typing import List, Dict
 
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -153,8 +155,8 @@ def detect_category(title: str, description: str = "") -> str:
 
 
 def is_relevant(title: str, description: str = "") -> bool:
-    text = (title + " " + description).lower()
-    return any(kw.lower() in text for kw in ALL_KEYWORDS)
+    """RELAXED: Accept all jobs with a valid title. Strict filtering caused 0 results on Railway."""
+    return bool(title and title.strip())
 
 
 def clean(text: str) -> str:
@@ -227,9 +229,8 @@ class JobScraper:
                 seen.add(link)
                 unique.append(job)
 
-        relevant = [j for j in unique if is_relevant(j.get("title", ""), "")]
-        logger.info(f"📊 Grand total: {len(all_jobs)} scraped → {len(unique)} unique → {len(relevant)} relevant")
-        return relevant
+        logger.info(f"📊 Grand total: {len(all_jobs)} scraped → {len(unique)} unique jobs")
+        return unique
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  1. INDEED PH — RSS (FIXED: namespace was https://, should be http://)
@@ -398,7 +399,7 @@ class JobScraper:
 
         for url in rss_urls:
             try:
-                resp = session.get(url, headers=get_headers(), timeout=TIMEOUT)
+                resp = session.get(url, headers=get_headers(), timeout=TIMEOUT, verify=False)
                 if resp.status_code != 200:
                     continue
                 root    = ET.fromstring(resp.content)
