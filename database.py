@@ -156,3 +156,10 @@ class Database:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    def delete_user(self, user_id: int):
+        """Para sa /deletedata command — GDPR compliance."""
+        conn = self.get_conn()
+        conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
